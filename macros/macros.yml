@@ -3,12 +3,20 @@ version: 2
 macros:
   - name: pivot_sfdc_history
     description: >
-      Pivots Salesforce history tables into a flattened state-over-time view.
-      It reconstructs the state of a record at every point a change occurred.
+      Pivots a standard Salesforce History table (e.g., CaseHistory) from a "tall" 
+      format into a "wide" format. This macro reconstructs the state of the parent 
+      record at every point in time a change was logged.
+      
+      It handles the common Salesforce quirk where lookup fields in history are 
+      named 'Owner' or 'Account' while the base table uses 'OwnerId' or 'AccountId'.
     arguments:
       - name: history_relation
         type: relation
-        description: "The dbt ref() or source() for the SFDC History table."
+        description: "The dbt relation (ref or source) pointing to the Salesforce History table."
       - name: case_relation
         type: relation
-        description: "The dbt ref() or source() for the base SFDC object (e.g. Case)."
+        description: "The dbt relation (ref or source) pointing to the base Salesforce object table (e.g., Case)."
+    
+    notes: >
+      This macro is designed specifically for Snowflake as it utilizes the 
+      `IGNORE NULLS` window function and the `EXCLUDE` clause in the final join.
