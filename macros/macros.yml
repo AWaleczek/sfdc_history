@@ -1,0 +1,14 @@
+version: 2
+
+macros:
+  - name: pivot_sfdc_history
+    description: >
+      Pivots Salesforce history tables into a flattened state-over-time view.
+      It reconstructs the state of a record at every point a change occurred.
+    arguments:
+      - name: history_relation
+        type: relation
+        description: "The dbt ref() or source() for the SFDC History table."
+      - name: case_relation
+        type: relation
+        description: "The dbt ref() or source() for the base SFDC object (e.g. Case)."

@@ -1,0 +1,9 @@
+name: 'sfdc_history_utils' # This is your package name
+version: '1.0.0'
+config-version: 2
+
+macro-paths: ["macros"]
+
+vars:
+  # Provide a default so the macro doesn't break if the user doesn't set it
+  extra_history_id_fields: []
