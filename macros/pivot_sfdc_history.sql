@@ -68,7 +68,8 @@
                 case_base.id as caseid,
                 case_base.createddate as createddate,
                 case_base.createdbyid as createdbyid,
-                'Initial' as datatype,
+                'initial' as changed_field,
+                'initial' as datatype,
                 {% for field_name in raw_field_values -%}
                     coalesce(
                         first_changes_pivoted.{{ field_name }}_init,
@@ -88,6 +89,7 @@
                 createddate,
                 createdbyid,
                 datatype,
+                field as changed_field,
                 {% for field_name in raw_field_values -%}
                     case when field = '{{ field_name }}' then newvalue end as {{ field_name }}
                     {%- if not loop.last %},{% endif %}
@@ -105,12 +107,12 @@
         {# 9. Reconstruct the state at every point in time (Fill Down) #}
         filled_history as (
             select
-                id as changeid,
+                id as change_id,
                 caseid,
-                createddate as changedate,
-                createdbyid as changecreatedbyid,
-                datatype as changedatatype,
-
+                createddate as change_date,
+                createdbyid as change_created_by_id,
+                datatype as change_datatype,
+                changed_field,
                 {% for field_name in raw_field_values -%}
                     last_value({{ field_name }} ignore nulls) over (
                         partition by caseid
@@ -139,24 +141,25 @@
                     {% endfor %}
                 ),
 
-                filled_history.changeid,
-                filled_history.changedatatype,
-                filled_history.changedate,
-                filled_history.changecreatedbyid,
-                filled_history.is_initial_record,
-                filled_history.is_latest_change,
-
                 {% for field_name in raw_field_values -%}
                     coalesce(
                         filled_history.{{ field_name ~ "_changes" }},
                         cast(case_base.{{ adapter.quote(field_name) }} as string)
-                    ) as {{ field_name }}{% if not loop.last %}, {% endif %}
+                    ) as {{ field_name }},
                 {% endfor %}
+
+                filled_history.change_id,
+                filled_history.changed_field,
+                filled_history.change_datatype,
+                filled_history.change_date,
+                filled_history.change_created_by_id,
+                filled_history.is_initial_record,
+                filled_history.is_latest_change
             from case_base
             inner join filled_history on case_base.id = filled_history.caseid
         )
 
-    select * from final_coalesced order by id, changedate
+    select * from final_coalesced order by id, change_date
 
     {% else %}
         {# Parsing fallback #}
