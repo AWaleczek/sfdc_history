@@ -1,4 +1,4 @@
-{% macro pivot_sfdc_history(history_relation, case_relation) %}
+{% macro pivot_sfdc_history(object_history_relation, object_relation, record_id) %}
 
     {# 1. Config #}
     {%- set fields_to_append_id = ["OWNER", "CREATEDBY", "LASTMODIFIEDBY", "ACCOUNT", "CONTACT"] -%}
@@ -7,7 +7,7 @@
     {# 2. Dynamic Field Fetching with execute guard #}
     {%- if execute -%}
         {%- set fetched_values = dbt_utils.get_column_values(
-            table=history_relation, column="upper(field)"
+            table=object_history_relation, column="upper(field)"
         ) -%}
 
         {%- for val in fetched_values -%}
@@ -20,15 +20,15 @@
     {%- endif -%}
 
     with
-        history_base as (select * from {{ history_relation }}),
+        history_base as (select * from {{ object_history_relation }}),
 
-        case_base as (select * from {{ case_relation }}),
+        object_base as (select * from {{ object_relation }}),
 
         {# 4. Correct field names to match Salesforce API names #}
         history_corrected as (
             select
                 id,
-                caseid,
+                {{ record_id }} as recordid,
                 oldvalue,
                 newvalue,
                 createddate,
@@ -48,13 +48,13 @@
         {# 5. Capture the 'OldValue' of the very first change to assist the Initial State #}
         first_changes_pivoted as (
             select
-                caseid,
+                recordid,
                 {% for field_name in raw_field_values -%}
                     max(case when field = '{{ field_name }}' then oldvalue end) as {{ field_name }}_init
                     {%- if not loop.last %},{% endif %}
                 {% endfor %}
             from (
-                select *, row_number() over (partition by caseid, field order by createddate asc) as rn
+                select *, row_number() over (partition by recordid, field order by createddate asc) as rn
                 from history_corrected
             )
             where rn = 1
@@ -64,28 +64,28 @@
         {# 6. Build the record's state as it was at the moment of creation #}
         initial_state as (
             select
-                concat(case_base.id, '_initial') as id,
-                case_base.id as caseid,
-                case_base.createddate as createddate,
-                case_base.createdbyid as createdbyid,
+                concat(object_base.id, '_initial') as id,
+                object_base.id as recordid,
+                object_base.createddate as createddate,
+                object_base.createdbyid as createdbyid,
                 'initial' as changed_field,
                 'initial' as datatype,
                 {% for field_name in raw_field_values -%}
                     coalesce(
                         first_changes_pivoted.{{ field_name }}_init,
-                        cast(case_base.{{ adapter.quote(field_name) }} as string)
+                        cast(object_base.{{ adapter.quote(field_name) }} as string)
                     ) as {{ field_name }}
                     {% if not loop.last %},{% endif %}
                 {% endfor %}
-            from case_base 
-            left join first_changes_pivoted on case_base.id = first_changes_pivoted.caseid
+            from object_base 
+            left join first_changes_pivoted on object_base.id = first_changes_pivoted.recordid
         ),
 
         {# 7. Pivot all subsequent changes #}
         pivoted_history as (
             select
                 id,
-                caseid,
+                recordid,
                 createddate,
                 createdbyid,
                 datatype,
@@ -108,14 +108,14 @@
         filled_history as (
             select
                 id as change_id,
-                caseid,
+                recordid,
                 createddate as change_date,
                 createdbyid as change_created_by_id,
                 datatype as change_datatype,
                 changed_field,
                 {% for field_name in raw_field_values -%}
                     last_value({{ field_name }} ignore nulls) over (
-                        partition by caseid
+                        partition by recordid
                         order by createddate, (case when is_initial_record then 0 else 1 end)
                         rows between unbounded preceding and current row
                     ) as {{ field_name ~ "_changes" }},
@@ -123,18 +123,18 @@
 
                 is_initial_record,
                 row_number() over (
-                    partition by caseid
+                    partition by recordid
                     order by createddate desc, (case when is_initial_record then 0 else 1 end) desc
                 ) = 1 as is_latest_change
             from all_history
         ),
 
-        {# 10. Final Coalesce: Merge history with current Case values and pull remaining static fields #}
+        {# 10. Final Coalesce: Merge history with current record values and pull remaining static fields #}
         final_coalesced as (
             select
                 
 
-                case_base.* exclude (
+                object_base.* exclude (
                     {% for field_name in raw_field_values %}
                         {{ adapter.quote(field_name) }}
                         {% if not loop.last %}, {% endif %}
@@ -144,7 +144,7 @@
                 {% for field_name in raw_field_values -%}
                     coalesce(
                         filled_history.{{ field_name ~ "_changes" }},
-                        cast(case_base.{{ adapter.quote(field_name) }} as string)
+                        cast(object_base.{{ adapter.quote(field_name) }} as string)
                     ) as {{ field_name }},
                 {% endfor %}
 
@@ -155,15 +155,15 @@
                 filled_history.change_created_by_id,
                 filled_history.is_initial_record,
                 filled_history.is_latest_change
-            from case_base
-            inner join filled_history on case_base.id = filled_history.caseid
+            from object_base
+            inner join filled_history on object_base.id = filled_history.recordid
         )
 
     select * from final_coalesced order by id, change_date
 
     {% else %}
         {# Parsing fallback #}
-        select * from {{ case_relation }} limit 0
+        select * from {{ object_relation }} limit 0
     {% endif %}
 
 {% endmacro %}
