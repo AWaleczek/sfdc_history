@@ -41,7 +41,7 @@
     {%- set columns = adapter.get_columns_in_relation(object_history_relation) -%}
 
     {# Map the required History columns #}
-    {%- set h_id = find_col(columns, "ID") -%}
+    {%- set h_id = sfdc_history_utils.find_col(columns, "ID") -%}
     {%- set h_record_id = find_col(columns, record_id | replace("_", "") | upper) -%}
     {%- set h_old = find_col(columns, "OLDVALUE") -%}
     {%- set h_new = find_col(columns, "NEWVALUE") -%}
