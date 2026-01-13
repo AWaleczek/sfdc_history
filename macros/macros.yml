@@ -16,7 +16,10 @@ macros:
       - name: case_relation
         type: relation
         description: "The dbt relation (ref or source) pointing to the base Salesforce object table (e.g., Case)."
+      - name: record_id
+        type: string
+        description: "The dbt relation (ref or source) pointing to the base Salesforce object table (e.g., Case)."
     
-    notes: >
-      This macro is designed specifically for Snowflake as it utilizes the 
-      `IGNORE NULLS` window function and the `EXCLUDE` clause in the final join.
+#notes: >
+ #     This macro is designed specifically for Snowflake as it utilizes the 
+  #    `IGNORE NULLS` window function and the `EXCLUDE` clause in the final join.
