@@ -42,13 +42,13 @@
 
     {# Map the required History columns #}
     {%- set h_id = sfdc_history_utils.find_col(columns, "ID") -%}
-    {%- set h_record_id = find_col(columns, record_id | replace("_", "") | upper) -%}
-    {%- set h_old = find_col(columns, "OLDVALUE") -%}
-    {%- set h_new = find_col(columns, "NEWVALUE") -%}
-    {%- set h_date = find_col(columns, "CREATEDDATE") -%}
-    {%- set h_user = find_col(columns, "CREATEDBYID") -%}
-    {%- set h_field = find_col(columns, "FIELD") -%}
-    {%- set h_type = find_col(columns, "DATATYPE") -%}
+    {%- set h_record_id = sfdc_history_utils.find_col(columns, record_id | replace("_", "") | upper) -%}
+    {%- set h_old = sfdc_history_utils.find_col(columns, "OLDVALUE") -%}
+    {%- set h_new = sfdc_history_utils.find_col(columns, "NEWVALUE") -%}
+    {%- set h_date = sfdc_history_utils.find_col(columns, "CREATEDDATE") -%}
+    {%- set h_user = sfdc_history_utils.find_col(columns, "CREATEDBYID") -%}
+    {%- set h_field = sfdc_history_utils.find_col(columns, "FIELD") -%}
+    {%- set h_type = sfdc_history_utils.find_col(columns, "DATATYPE") -%}
 
     with
         history_base as (select * from {{ object_history_relation }}),
