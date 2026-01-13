@@ -6,18 +6,41 @@
 
     {# 2. Dynamic Field Fetching with execute guard #}
     {%- if execute -%}
-        {%- set fetched_values = dbt_utils.get_column_values(
-            table=object_history_relation, column="upper(field)"
-        ) -%}
+    {%- set fetched_values = dbt_utils.get_column_values(table=object_history_relation, column="field") -%}
 
-        {%- for val in fetched_values -%}
-            {%- if val in fields_to_append_id -%}
-                {%- do raw_field_values.append(val ~ "ID") -%}
-            {%- else -%} 
-                {%- do raw_field_values.append(val) -%}
-            {%- endif -%}
-        {%- endfor -%}
-    {%- endif -%}
+    {%- for val in fetched_values -%}
+        {# Slugify cleans special chars, replace removes the underscores it creates #}
+        {%- set clean_val = dbt_utils.slugify(val) | replace("_", "") | upper -%}
+        
+        {%- if clean_val in fields_to_append_id -%}
+            {%- do raw_field_values.append(clean_val ~ "ID") -%}
+        {%- else -%} 
+            {%- do raw_field_values.append(clean_val) -%}
+        {%- endif -%}
+    {%- endfor -%}
+{%- endif -%}
+
+{%- set columns = adapter.get_columns_in_relation(object_history_relation) -%}
+
+{# Helper to find the actual column name regardless of underscores #}
+{%- macro find_col(cols, target) -%}
+    {%- for c in cols -%}
+        {%- if c.column | replace("_", "") | upper == target | upper -%}
+            {{ return(c.column) }}
+        {%- endif -%}
+    {%- endfor -%}
+    {{ return(target) }} {# Fallback #}
+{%- endmacro -%}
+
+{# Map the required History columns #}
+{%- set h_id = find_col(columns, 'ID') -%}
+{%- set h_record_id = find_col(columns, record_id | replace("_", "") | upper) -%}
+{%- set h_old = find_col(columns, 'OLDVALUE') -%}
+{%- set h_new = find_col(columns, 'NEWVALUE') -%}
+{%- set h_date = find_col(columns, 'CREATEDDATE') -%}
+{%- set h_user = find_col(columns, 'CREATEDBYID') -%}
+{%- set h_field = find_col(columns, 'FIELD') -%}
+{%- set h_type = find_col(columns, 'DATATYPE') -%}
 
     with
         history_base as (select * from {{ object_history_relation }}),
@@ -27,20 +50,20 @@
         {# 4. Correct field names to match Salesforce API names #}
         history_corrected as (
             select
-                id,
-                {{ record_id }} as recordid,
-                oldvalue,
-                newvalue,
-                createddate,
-                createdbyid,
-                datatype,
-                case
-                    {% for f in fields_to_append_id -%}
-                        when upper(field) = '{{ f }}' then '{{ f  ~ "ID" }}'
-                    {% endfor -%}
-                    else upper(field)
-                end as field
-            from history_base
+        {{ adapter.quote(h_id) }} as id,
+        {{ adapter.quote(h_record_id) }} as recordid,
+        {{ adapter.quote(h_old) }} as oldvalue,
+        {{ adapter.quote(h_new) }} as newvalue,
+        {{ adapter.quote(h_date) }} as createddate,
+        {{ adapter.quote(h_user) }} as createdbyid,
+        {{ adapter.quote(h_type) }} as datatype,
+        case
+            {% for f in fields_to_append_id -%}
+                when replace(upper({{ adapter.quote(h_field) }}), '_', '') = '{{ f }}' then '{{ f ~ "ID" }}'
+            {% endfor -%}
+            else replace(upper({{ adapter.quote(h_field) }}), '_', '')
+        end as field
+    from history_base
         ),
 
     {% if raw_field_values | length > 0 %}
